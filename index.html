@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Impuestos Ali · Gestión compartida</title>
-    <link rel="manifest" href="manifest.json">
+    <!-- El manifiesto se cargará solo si estamos en un entorno https/http, para evitar errores en file:// -->
+    <link rel="manifest" href="manifest.json" id="manifestLink">
     <link rel="apple-touch-icon" href="logo192.png">
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Advertencia de Tailwind en producción se ignora por ahora -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -61,7 +63,7 @@
             <p class="text-xs text-gray-500 mt-3"><i class="fas fa-cloud-upload-alt"></i> Los cambios se guardan automáticamente. Todos los familiares ven los mismos datos.</p>
         </div>
 
-        <!-- Tarjetas de servicios (se llenan dinámicamente) -->
+        <!-- Tarjetas de servicios -->
         <div id="servicesContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10"></div>
 
         <!-- Herramientas extra -->
@@ -104,11 +106,13 @@ Gas,2026-05-21,21112.14</pre>
 
     <script>
         // ================= CONFIGURACIÓN DE SUPABASE =================
-        const SUPABASE_URL = 'https://qhhxetctvinabglqwsav.supabase.co';   // <-- REEMPLAZA
+        // 🔴 REEMPLAZA ESTOS VALORES CON LOS TUYOS 🔴
+        const SUPABASE_URL = 'https://qhhxetctvinabglqwsav.supabase.co/rest/v1/';   // <-- REEMPLAZA
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoaHhldGN0dmluYWJnbHF3c2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1OTkxNzYsImV4cCI6MjA5NDE3NTE3Nn0.4OwzDwDqeHUk0jObmcg3VDiPNVsjqOj5y490jkRMO_g';          // <-- REEMPLAZA
         // =============================================================
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Inicializamos el cliente de Supabase (sin redeclarar, solo una vez)
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const TABLE_NAME = 'pagos_familiares';
         const RECORD_ID = 1;
 
@@ -220,9 +224,8 @@ Gas,2026-05-21,21112.14</pre>
             if (isLoading) return;
             isLoading = true;
             try {
-                // Preparamos el objeto completo
                 const dataToSave = { ...billsData, _annualPaid: annualPaidFlag };
-                const { error } = await supabase
+                const { error } = await _supabase
                     .from(TABLE_NAME)
                     .update({ detalle: dataToSave, updated_at: new Date() })
                     .eq('id', RECORD_ID);
@@ -238,7 +241,7 @@ Gas,2026-05-21,21112.14</pre>
         async function cargarDesdeSupabase() {
             isLoading = true;
             try {
-                const { data, error } = await supabase
+                const { data, error } = await _supabase
                     .from(TABLE_NAME)
                     .select('detalle')
                     .eq('id', RECORD_ID)
@@ -250,26 +253,22 @@ Gas,2026-05-21,21112.14</pre>
                     const { _annualPaid, ...rest } = remote;
                     billsData = rest;
                     annualPaidFlag = _annualPaid || { atm: false };
-                    // Verificar que todos los servicios tengan la estructura correcta
                     for (let s of SERVICES) {
                         if (!billsData[s.id]) billsData[s.id] = { bills: [] };
                         if (!billsData[s.id].bills) billsData[s.id].bills = [];
                     }
                 } else {
-                    // No hay datos en la tabla: creamos el registro por primera vez
                     billsData = getDefaultBillsData();
                     annualPaidFlag = { atm: false };
                     const newRecord = { id: RECORD_ID, detalle: { ...billsData, _annualPaid: annualPaidFlag }, updated_at: new Date() };
-                    const { error: insertError } = await supabase.from(TABLE_NAME).insert(newRecord);
+                    const { error: insertError } = await _supabase.from(TABLE_NAME).insert(newRecord);
                     if (insertError) throw insertError;
                 }
-                // Forzar renderizado
                 renderCards();
                 showToast("🔄 Datos sincronizados desde la nube");
             } catch (err) {
                 console.error("Error cargando:", err);
                 showToast("⚠️ Usando datos de respaldo local");
-                // Fallback: intentar cargar desde localStorage temporal
                 const localBackup = localStorage.getItem('temp_impuestos_ali');
                 if (localBackup) {
                     try {
@@ -288,7 +287,6 @@ Gas,2026-05-21,21112.14</pre>
             }
         }
 
-        // Guardado manual adicional para respaldo local
         function backupToLocalStorage() {
             localStorage.setItem('temp_impuestos_ali', JSON.stringify({ billsData, annualPaidFlag }));
         }
@@ -355,7 +353,7 @@ Gas,2026-05-21,21112.14</pre>
             updateTotalUI();
         }
 
-        // ========== RENDERIZADO DE TARJETAS (asegurado) ==========
+        // ========== RENDERIZADO DE TARJETAS ==========
         function renderCards() {
             if (!servicesContainer) return;
             servicesContainer.innerHTML = '';
@@ -369,7 +367,6 @@ Gas,2026-05-21,21112.14</pre>
                 const card = document.createElement('div');
                 card.className = 'bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 card-hover';
 
-                // Header
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'p-5 pb-2 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gradient-to-r from-gray-50 to-white';
                 headerDiv.innerHTML = `
@@ -454,7 +451,7 @@ Gas,2026-05-21,21112.14</pre>
                 servicesContainer.appendChild(card);
             }
 
-            // Bindear eventos
+            // Rebind eventos
             document.querySelectorAll('.copyAccountBtn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const card = btn.closest('.bg-white');
@@ -544,7 +541,6 @@ Gas,2026-05-21,21112.14</pre>
             }
         }
 
-        // Backup local
         function exportLocalBackup() {
             const backup = { billsData, annualPaidFlag, exportDate: new Date() };
             const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
@@ -574,7 +570,6 @@ Gas,2026-05-21,21112.14</pre>
             reader.readAsText(file);
         }
 
-        // Pegado rápido
         async function applyQuickPaste() {
             const raw = quickPasteArea.value;
             if (!raw.trim()) return;
@@ -610,6 +605,11 @@ Gas,2026-05-21,21112.14</pre>
 
         // ========== INICIALIZACIÓN ==========
         async function init() {
+            // Desactivar el manifiesto si estamos en file:// para evitar errores de consola
+            if (window.location.protocol === 'file:') {
+                const manifestLink = document.getElementById('manifestLink');
+                if (manifestLink) manifestLink.remove();
+            }
             displayCurrentUrl();
             copyUrlBtn.addEventListener('click', copyCurrentUrl);
             let savedMonth = localStorage.getItem('tax_last_month_multi');
@@ -618,8 +618,7 @@ Gas,2026-05-21,21112.14</pre>
             monthPicker.value = (savedMonth && /^\d{4}-\d{2}$/.test(savedMonth)) ? savedMonth : defaultMonth;
             currentMonthKey = monthPicker.value;
             
-            await cargarDesdeSupabase();  // Carga y renderiza
-            // Asegurar que el mes actual se guarde
+            await cargarDesdeSupabase();
             localStorage.setItem('tax_last_month_multi', currentMonthKey);
             
             monthPicker.addEventListener('change', e => changeMonth(e.target.value));
