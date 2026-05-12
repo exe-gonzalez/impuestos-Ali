@@ -15,10 +15,7 @@
         .card-hover { transition: all 0.2s ease; }
         .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -12px rgba(0, 0, 0, 0.1); }
         .glass-card { background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(2px); border-radius: 2rem; }
-        .btn-primary { background: linear-gradient(95deg, #2b6e4f, #1e5940); transition: all 0.2s; }
-        .btn-primary:hover { background: linear-gradient(95deg, #1e5940, #144d34); transform: scale(1.01); }
         .factura-item { transition: background 0.1s; }
-        .btn-copy-account:active { transform: scale(0.96); }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -59,13 +56,13 @@
                     <button id="resetMonthBtn" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-2 rounded-xl text-sm transition"><i class="fas fa-sync-alt"></i> Resetear mes</button>
                 </div>
             </div>
-            <p class="text-xs text-gray-500 mt-3"><i class="fas fa-info-circle"></i> Podés agregar múltiples vencimientos por servicio. El total solo considera vencimientos hasta el mes seleccionado (incluye vencidos). Usá "Ordenar vencimientos" para ordenar por fecha.</p>
+            <p class="text-xs text-gray-500 mt-3"><i class="fas fa-info-circle"></i> Podés agregar múltiples vencimientos. El total solo considera vencimientos hasta el mes seleccionado (incluye vencidos).</p>
         </div>
 
-        <!-- Tarjetas de servicios -->
+        <!-- Tarjetas de servicios dinámicas (cada una con múltiples facturas) -->
         <div id="servicesContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10"></div>
 
-        <!-- Herramientas extra -->
+        <!-- Herramientas extra: backup / pegado rápido -->
         <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-xl border border-emerald-100 mt-6">
             <div class="flex flex-wrap justify-between items-center gap-4">
                 <div class="flex gap-3">
@@ -91,7 +88,7 @@ Gas,2026-05-21,21112.14</pre>
             </div>
         </div>
 
-        <!-- FOOTER con URL -->
+        <!-- FOOTER con URL de la aplicación (útil para compartir en GitHub Pages) -->
         <div class="mt-10 text-center text-gray-500 text-sm border-t border-gray-200 pt-6 pb-4 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div class="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                 <i class="fas fa-link text-emerald-600"></i>
@@ -105,20 +102,20 @@ Gas,2026-05-21,21112.14</pre>
     </div>
 
     <script>
-        // ----- SERVICIOS (ATM con ícono casa) -----
+        // ----- DEFINICIÓN DE SERVICIOS (con íconos actualizados) -----
         const SERVICES = [
             { id: "agua", name: "💧 AGUA", account: "080 0115322 000 0", portal: "https://www.aysam.com.ar/", icon: "fa-tint", annualEnabled: false },
             { id: "luz", name: "⚡ LUZ", account: "2532800", portal: "https://www.edemsa.com/", icon: "fa-bolt", annualEnabled: false },
             { id: "gas", name: "🔥 GAS", account: "20631467", portal: "https://www.ecogas.com.ar/", icon: "fa-fire", annualEnabled: false },
             { id: "muni", name: "🏛️ MUNICIPALIDAD", account: "1177009000000", portal: "https://ciudaddemendoza.gob.ar/oficina-virtual/", icon: "fa-landmark", annualEnabled: false },
-            { id: "atm", name: "🏠 ATM (Inmobiliario)", account: "01 50310 1", portal: "https://atm.mendoza.gov.ar/descargarboletoinmobiliario/", icon: "fa-house-chimney", annualEnabled: true } // permite pago anual
+            { id: "atm", name: "🏠 ATM (Inmobiliario)", account: "01 50310 1", portal: "https://atm.mendoza.gov.ar/descargarboletoinmobiliario/", icon: "fa-house-chimney", annualEnabled: true }
         ];
 
         let currentMonthKey = "";
-        let billsData = {};      // { servicioId: { bills: [], annualPaid: bool } }
-        let annualPaidFlag = { atm: false };  // solo para ATM
+        let billsData = {};
+        let annualPaidFlag = { atm: false };
 
-        // DOM
+        // DOM elements
         const servicesContainer = document.getElementById('servicesContainer');
         const monthPicker = document.getElementById('monthPicker');
         const totalSpan = document.getElementById('totalAmountSpan');
@@ -148,12 +145,27 @@ Gas,2026-05-21,21112.14</pre>
             setTimeout(() => toast.remove(), 2000);
         }
 
-        // Parseo de montos: soporta "4,600.00" y "4.600,00"
+        // ***** FUNCIÓN CORREGIDA PARA PARSEO DE MONTOS (SOPORTA 4.897,00 y 4,897.00) *****
         function parseAmountFromInput(str) {
             if (!str) return 0;
-            let cleaned = str.trim().replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
-            let num = parseFloat(cleaned);
-            return isNaN(num) ? 0 : num;
+            let s = str.trim().replace(/\s/g, '');
+            if (s === "") return 0;
+            
+            // Detectar si usa coma decimal (formato argentino: 1.234,56)
+            const usesCommaDecimal = /,\d{1,2}$/.test(s) && !/\.\d{1,2}$/.test(s);
+            
+            if (usesCommaDecimal) {
+                // Eliminar puntos de miles, reemplazar coma decimal por punto
+                let normalized = s.replace(/\./g, '');
+                normalized = normalized.replace(',', '.');
+                let num = parseFloat(normalized);
+                return isNaN(num) ? 0 : num;
+            } else {
+                // Formato internacional o simple: eliminar comas de miles
+                let normalized = s.replace(/,/g, '');
+                let num = parseFloat(normalized);
+                return isNaN(num) ? 0 : num;
+            }
         }
 
         function formatCurrency(value) {
@@ -161,7 +173,7 @@ Gas,2026-05-21,21112.14</pre>
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(value);
         }
 
-        // Fecha límite para incluir en total: último día del mes seleccionado
+        // Fecha límite: último día del mes seleccionado
         function getMonthEndDate(yearMonth) {
             if (!yearMonth) return new Date(2099,11,31);
             let [year, month] = yearMonth.split('-');
@@ -169,22 +181,19 @@ Gas,2026-05-21,21112.14</pre>
             return new Date(parseInt(year), parseInt(month)-1, lastDay);
         }
 
-        // Calcular total solo con vencimientos <= último día del mes seleccionado (incluye vencidos)
         function computeTotal() {
             if (!currentMonthKey) return 0;
             const endDate = getMonthEndDate(currentMonthKey);
             let total = 0;
             for (let s of SERVICES) {
-                if (s.id === 'atm' && annualPaidFlag.atm) continue; // pago anual, no suma
+                if (s.id === 'atm' && annualPaidFlag.atm) continue;
                 const service = billsData[s.id];
                 if (service && service.bills) {
                     for (let bill of service.bills) {
                         if (bill.paid) continue;
                         if (bill.amount > 0 && bill.dueDate) {
                             const due = new Date(bill.dueDate);
-                            if (!isNaN(due) && due <= endDate) {
-                                total += bill.amount;
-                            }
+                            if (!isNaN(due) && due <= endDate) total += bill.amount;
                         }
                     }
                 }
@@ -194,7 +203,7 @@ Gas,2026-05-21,21112.14</pre>
 
         function updateTotalUI() { totalSpan.innerText = formatCurrency(computeTotal()); }
 
-        // Guardar / Cargar localStorage (incluye annualPaidFlag para atm)
+        // Guardar / Cargar localStorage (incluye annualPaidFlag)
         function saveToLocalStorage() {
             if (!currentMonthKey) return;
             const toStore = {
@@ -213,8 +222,7 @@ Gas,2026-05-21,21112.14</pre>
                     const parsed = JSON.parse(stored);
                     if (parsed.month === month && parsed.servicesData) {
                         billsData = parsed.servicesData;
-                        if (parsed.annualPaid) annualPaidFlag = parsed.annualPaid;
-                        else annualPaidFlag = { atm: false };
+                        annualPaidFlag = parsed.annualPaid || { atm: false };
                         for (let s of SERVICES) {
                             if (!billsData[s.id]) billsData[s.id] = { bills: [] };
                             if (!billsData[s.id].bills) billsData[s.id].bills = [];
@@ -223,7 +231,6 @@ Gas,2026-05-21,21112.14</pre>
                     }
                 } catch(e) { console.warn(e); }
             }
-            // Inicializar vacío
             billsData = {};
             for (let s of SERVICES) billsData[s.id] = { bills: [] };
             annualPaidFlag = { atm: false };
@@ -234,8 +241,7 @@ Gas,2026-05-21,21112.14</pre>
 
         function addBillRow(serviceId) {
             if (!billsData[serviceId]) billsData[serviceId] = { bills: [] };
-            const newBill = { id: generateBillId(), dueDate: "", amount: 0, paid: false };
-            billsData[serviceId].bills.push(newBill);
+            billsData[serviceId].bills.push({ id: generateBillId(), dueDate: "", amount: 0, paid: false });
             saveToLocalStorage();
             renderCards();
         }
@@ -249,9 +255,7 @@ Gas,2026-05-21,21112.14</pre>
         }
 
         function updateBillField(serviceId, billId, field, value) {
-            const service = billsData[serviceId];
-            if (!service) return;
-            const bill = service.bills.find(b => b.id === billId);
+            const bill = billsData[serviceId]?.bills.find(b => b.id === billId);
             if (bill) {
                 if (field === 'dueDate') bill.dueDate = value;
                 if (field === 'amount') bill.amount = parseAmountFromInput(value);
@@ -262,15 +266,12 @@ Gas,2026-05-21,21112.14</pre>
             }
         }
 
-        function copyAccount(accountNumber) {
-            navigator.clipboard.writeText(accountNumber).then(() => showToast("✅ Cuenta copiada"));
-        }
+        function copyAccount(accountNumber) { navigator.clipboard.writeText(accountNumber).then(() => showToast("✅ Cuenta copiada")); }
 
-        // Ordenar vencimientos de cada servicio por fecha (los vacíos al final)
         function sortAllBills() {
             for (let s of SERVICES) {
                 const service = billsData[s.id];
-                if (service && service.bills) {
+                if (service?.bills) {
                     service.bills.sort((a,b) => {
                         if (!a.dueDate && !b.dueDate) return 0;
                         if (!a.dueDate) return 1;
@@ -284,20 +285,17 @@ Gas,2026-05-21,21112.14</pre>
             showToast("✅ Vencimientos ordenados por fecha");
         }
 
-        // Alternar pago anual en ATM
         function toggleAnnualPaid(checked) {
             annualPaidFlag.atm = checked;
-            if (checked) {
-                // limpiar vencimientos de ATM para que no aparezcan
-                if (billsData.atm) billsData.atm.bills = [];
-            }
+            if (checked && billsData.atm) billsData.atm.bills = [];
             saveToLocalStorage();
             renderCards();
             updateTotalUI();
         }
 
-        // Renderizado de tarjetas
+        // Renderizado completo de tarjetas de servicios
         function renderCards() {
+            if (!servicesContainer) return;
             servicesContainer.innerHTML = '';
             for (let s of SERVICES) {
                 const serviceData = billsData[s.id] || { bills: [] };
@@ -308,7 +306,7 @@ Gas,2026-05-21,21112.14</pre>
                 const card = document.createElement('div');
                 card.className = 'bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 card-hover';
 
-                // Header
+                // Header con nombre, cuenta, botón copiar y portal
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'p-5 pb-2 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gradient-to-r from-gray-50 to-white';
                 headerDiv.innerHTML = `
@@ -353,7 +351,7 @@ Gas,2026-05-21,21112.14</pre>
                     } else {
                         bills.forEach((bill, idx) => {
                             const billDiv = document.createElement('div');
-                            billDiv.className = `factura-item p-3 rounded-xl border ${bill.paid ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'} shadow-sm`;
+                            billDiv.className = `factura-item p-3 rounded-xl border ${bill.paid ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'} shadow-sm transition`;
                             const dueDateValue = bill.dueDate || '';
                             const amountValue = bill.amount;
                             const isPaid = !!bill.paid;
@@ -370,7 +368,7 @@ Gas,2026-05-21,21112.14</pre>
                                     </div>
                                     <div>
                                         <label class="block text-xs font-medium text-gray-600">💰 Monto (ARS)</label>
-                                        <input type="text" class="amountInput w-full mt-1 p-2 border border-gray-300 rounded-xl text-sm" data-service-id="${s.id}" data-bill-id="${bill.id}" value="${amountValue > 0 ? amountValue.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : ''}" placeholder="Ej: 4.600,00">
+                                        <input type="text" class="amountInput w-full mt-1 p-2 border border-gray-300 rounded-xl text-sm" data-service-id="${s.id}" data-bill-id="${bill.id}" value="${amountValue > 0 ? amountValue.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : ''}" placeholder="Ej: 4.897,00">
                                     </div>
                                 </div>
                                 <div class="flex justify-between items-center mt-2">
@@ -390,7 +388,6 @@ Gas,2026-05-21,21112.14</pre>
                     addButton.addEventListener('click', (e) => { e.preventDefault(); addBillRow(s.id); });
                     bodyDiv.appendChild(addButton);
                 } else {
-                    // modo pago anual: mostrar mensaje
                     const annualMsg = document.createElement('div');
                     annualMsg.className = 'text-center py-6 text-emerald-700 bg-emerald-50 rounded-xl';
                     annualMsg.innerHTML = '<i class="fas fa-check-circle"></i> Este impuesto ya está pago anualmente ✅';
@@ -401,7 +398,13 @@ Gas,2026-05-21,21112.14</pre>
                 servicesContainer.appendChild(card);
             }
 
-            // Rebindear eventos
+            // Rebindear eventos después de renderizar
+            attachCardEvents();
+            updateTotalUI();
+        }
+
+        function attachCardEvents() {
+            // Copiar cuenta
             document.querySelectorAll('.copyAccountBtn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const card = btn.closest('.bg-white');
@@ -414,27 +417,25 @@ Gas,2026-05-21,21112.14</pre>
                     }
                 });
             });
+            // Fecha vencimiento
             document.querySelectorAll('.dueDateInput').forEach(inp => {
                 inp.addEventListener('change', (e) => {
-                    const sid = inp.dataset.serviceId;
-                    const bid = inp.dataset.billId;
-                    updateBillField(sid, bid, 'dueDate', inp.value);
+                    updateBillField(inp.dataset.serviceId, inp.dataset.billId, 'dueDate', inp.value);
                 });
             });
+            // Monto
             document.querySelectorAll('.amountInput').forEach(inp => {
                 inp.addEventListener('change', (e) => {
-                    const sid = inp.dataset.serviceId;
-                    const bid = inp.dataset.billId;
-                    updateBillField(sid, bid, 'amount', inp.value);
+                    updateBillField(inp.dataset.serviceId, inp.dataset.billId, 'amount', inp.value);
                 });
             });
+            // Checkbox pagado
             document.querySelectorAll('.paidCheckbox').forEach(chk => {
                 chk.addEventListener('change', (e) => {
-                    const sid = chk.dataset.serviceId;
-                    const bid = chk.dataset.billId;
-                    updateBillField(sid, bid, 'paid', chk.checked);
+                    updateBillField(chk.dataset.serviceId, chk.dataset.billId, 'paid', chk.checked);
                 });
             });
+            // Botones eliminar
             document.querySelectorAll('.removeBillBtn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -443,21 +444,18 @@ Gas,2026-05-21,21112.14</pre>
                     if (sid && bid && confirm('¿Eliminar este vencimiento?')) removeBill(sid, bid);
                 });
             });
-            updateTotalUI();
         }
 
-        // ----- Generar resumen con formato minimalista (sin estados, sin 🔹, saltos de línea) -----
+        // ----- Generar resumen con formato minimalista (sin detalles de estado, sin 🔹, con saltos de línea) -----
         function generateFormattedSummary() {
             const selectedMonth = monthPicker.value;
-            const monthName = selectedMonth ? (() => {
-                const [y,m] = selectedMonth.split('-');
-                return new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('es-AR', { year:'numeric', month:'long' });
-            })() : 'este mes';
+            const monthName = selectedMonth ? (()=>{let [y,m]=selectedMonth.split('-'); return new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('es-AR',{year:'numeric',month:'long'});})() : 'este mes';
             const lines = [];
             lines.push(`📆 *RESUMEN IMPUESTOS ALI - ${monthName.toUpperCase()}*`);
             lines.push('');
             let totalPendiente = 0;
             const endDate = getMonthEndDate(selectedMonth);
+
             for (let s of SERVICES) {
                 if (s.id === 'atm' && annualPaidFlag.atm) {
                     lines.push(`*${s.name}*: Ya se ha pagado anualmente.`);
@@ -466,24 +464,16 @@ Gas,2026-05-21,21112.14</pre>
                 }
                 const service = billsData[s.id];
                 const bills = service?.bills || [];
-                const filteredBills = bills.filter(b => {
-                    if (b.paid) return false;
-                    if (b.amount <= 0) return false;
-                    if (!b.dueDate) return false;
-                    const dueDate = new Date(b.dueDate);
-                    return !isNaN(dueDate) && dueDate <= endDate;
-                });
-                if (filteredBills.length === 0) {
+                const filtered = bills.filter(b => !b.paid && b.amount > 0 && b.dueDate && new Date(b.dueDate) <= endDate);
+                if (filtered.length === 0) {
                     lines.push(`*${s.name}*: -`);
                     lines.push('');
                     continue;
                 }
                 lines.push(`*${s.name}*:`);
-                filteredBills.forEach((bill, idx) => {
-                    const monto = bill.amount;
-                    const due = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('es-AR') : 'Sin fecha';
-                    lines.push(`   ${idx+1}) ${formatCurrency(monto)} · Vence: ${due}`);
-                    totalPendiente += monto;
+                filtered.forEach((bill, idx) => {
+                    lines.push(`   ${idx+1}) ${formatCurrency(bill.amount)} · Vence: ${new Date(bill.dueDate).toLocaleDateString('es-AR')}`);
+                    totalPendiente += bill.amount;
                 });
                 lines.push('');
             }
@@ -499,12 +489,10 @@ Gas,2026-05-21,21112.14</pre>
         }
 
         function exportToPDF() {
-            const selectedMonth = monthPicker.value;
-            const monthTitle = selectedMonth ? (()=>{let [y,m]=selectedMonth.split('-'); return new Date(parseInt(y), parseInt(m)-1,1).toLocaleDateString('es-AR',{year:'numeric',month:'long'});})() : 'Mes actual';
-            const content = generateFormattedSummary().replace(/\*/g, '').replace(/📆/, '').replace(/💰/, '').replace(/📱/, '').trim();
+            const text = generateFormattedSummary().replace(/\*/g, '');
             const element = document.createElement('div');
-            element.innerHTML = `<div style="font-family:Inter; padding:20px;"><h2>🧾 Impuestos Ali - ${monthTitle}</h2><pre style="white-space:pre-wrap; font-size:12px;">${content}</pre><footer style="margin-top:20px;">Generado ${new Date().toLocaleString()}</footer></div>`;
-            html2pdf().set({ margin: 0.5, filename: `impuestos_ali_${selectedMonth}.pdf` }).from(element).save();
+            element.innerHTML = `<div style="font-family:Inter; padding:20px;"><h2>🧾 Impuestos Ali - Resumen</h2><pre style="white-space:pre-wrap; font-size:12px;">${text}</pre><footer style="margin-top:20px;">Generado ${new Date().toLocaleString()}</footer></div>`;
+            html2pdf().set({ margin: 0.5, filename: `impuestos_ali_${monthPicker.value}.pdf` }).from(element).save();
         }
 
         function copySummary() {
@@ -522,35 +510,43 @@ Gas,2026-05-21,21112.14</pre>
             }
         }
 
-        // Backup
+        // Backup / Restore
         function exportFullBackup() {
-            const all = [];
-            for (let i=0;i<localStorage.length;i++) {
-                const k = localStorage.key(i);
-                if (k && (k.startsWith('tax_multi_') || k === 'tax_last_month_multi')) all.push({key:k, value:localStorage.getItem(k)});
+            const allKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('tax_multi_') || key === 'tax_last_month_multi')) {
+                    allKeys.push({ key, value: localStorage.getItem(key) });
+                }
             }
-            const blob = new Blob([JSON.stringify({version:2, exportDate: new Date(), monthsData:all})], {type:'application/json'});
+            const backup = { version: 2, exportDate: new Date().toISOString(), monthsData: allKeys };
+            const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = `tax_ali_backup_${new Date().toISOString().slice(0,10)}.json`;
             a.click();
         }
+
         function importBackup(file) {
             const reader = new FileReader();
-            reader.onload = e => {
+            reader.onload = (e) => {
                 try {
-                    const data = JSON.parse(e.target.result);
-                    if (data.monthsData) {
-                        data.monthsData.forEach(item => localStorage.setItem(item.key, item.value));
-                        alert("✅ Restauración exitosa. Recargando...");
+                    const backup = JSON.parse(e.target.result);
+                    if (backup.monthsData && Array.isArray(backup.monthsData)) {
+                        for (let item of backup.monthsData) {
+                            localStorage.setItem(item.key, item.value);
+                        }
+                        alert('✅ Restauración exitosa. Recargando...');
                         location.reload();
-                    } else alert("Formato inválido");
-                } catch(err) { alert("Error: "+err.message); }
+                    } else {
+                        alert('Formato de backup inválido');
+                    }
+                } catch(err) { alert('Error al leer archivo: ' + err.message); }
             };
             reader.readAsText(file);
         }
 
-        // Pegado rápido mejorado
+        // Pegado rápido
         function applyQuickPaste() {
             const raw = quickPasteArea.value;
             if (!raw.trim()) return;
@@ -559,22 +555,28 @@ Gas,2026-05-21,21112.14</pre>
             for (let line of lines) {
                 line = line.trim();
                 if (!line) continue;
-                const parts = line.split(',').map(p=>p.trim());
-                if (parts.length>=3) {
+                const parts = line.split(',').map(p => p.trim());
+                if (parts.length >= 3) {
                     let match = SERVICES.find(s => s.name.toLowerCase().includes(parts[0].toLowerCase()) || s.id === parts[0].toLowerCase());
-                    if (!match) continue;
-                    const dateStr = parts[1];
-                    const amountVal = parseAmountFromInput(parts[2]);
-                    if (dateStr && !isNaN(amountVal) && amountVal>0) {
-                        const newBill = { id: generateBillId(), dueDate: dateStr, amount: amountVal, paid: false };
-                        if (!billsData[match.id]) billsData[match.id] = { bills: [] };
-                        billsData[match.id].bills.push(newBill);
-                        added++;
+                    if (match) {
+                        const dateStr = parts[1];
+                        const amountVal = parseAmountFromInput(parts[2]);
+                        if (dateStr && !isNaN(amountVal) && amountVal > 0) {
+                            if (!billsData[match.id]) billsData[match.id] = { bills: [] };
+                            billsData[match.id].bills.push({ id: generateBillId(), dueDate: dateStr, amount: amountVal, paid: false });
+                            added++;
+                        }
                     }
                 }
             }
-            if (added) { saveToLocalStorage(); renderCards(); quickPasteArea.value = ''; showToast(`✅ ${added} vencimientos agregados`); }
-            else alert("No se pudo interpretar. Formato: Servicio,YYYY-MM-DD,1234.56");
+            if (added) {
+                saveToLocalStorage();
+                renderCards();
+                quickPasteArea.value = '';
+                showToast(`✅ ${added} vencimientos agregados`);
+            } else {
+                alert('⚠️ No se pudo interpretar. Usá formato: "Agua,2026-05-10,20077"');
+            }
         }
 
         function changeMonth(newMonth) {
@@ -587,6 +589,7 @@ Gas,2026-05-21,21112.14</pre>
         function init() {
             displayCurrentUrl();
             copyUrlBtn.addEventListener('click', copyCurrentUrl);
+
             let savedMonth = localStorage.getItem('tax_last_month_multi');
             const today = new Date();
             const defaultMonth = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
@@ -596,7 +599,7 @@ Gas,2026-05-21,21112.14</pre>
             saveToLocalStorage();
             renderCards();
 
-            monthPicker.addEventListener('change', e => changeMonth(e.target.value));
+            monthPicker.addEventListener('change', (e) => changeMonth(e.target.value));
             whatsappBtn.addEventListener('click', sendWhatsApp);
             pdfBtn.addEventListener('click', exportToPDF);
             copySummaryBtn.addEventListener('click', copySummary);
@@ -604,7 +607,7 @@ Gas,2026-05-21,21112.14</pre>
             resetMonthBtn.addEventListener('click', resetMonth);
             exportDataBtn.addEventListener('click', exportFullBackup);
             importDataBtn.addEventListener('click', () => importFileInput.click());
-            importFileInput.addEventListener('change', e => { if(e.target.files.length) importBackup(e.target.files[0]); importFileInput.value=''; });
+            importFileInput.addEventListener('change', (e) => { if(e.target.files.length) importBackup(e.target.files[0]); importFileInput.value = ''; });
             applyPasteBtn.addEventListener('click', applyQuickPaste);
         }
         init();
