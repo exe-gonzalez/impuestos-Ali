@@ -24,7 +24,7 @@
 <body class="p-4 md:p-8">
 
     <div class="max-w-7xl mx-auto">
-        <!-- Header con título personalizado -->
+        <!-- Header -->
         <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div class="flex items-center gap-3">
                 <div class="bg-white p-3 rounded-2xl shadow-md animate-pulse">
@@ -55,16 +55,17 @@
                 </div>
                 <div class="flex gap-2">
                     <button id="copySummaryBtn" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-xl text-sm font-medium transition"><i class="fas fa-copy"></i> Copiar resumen</button>
+                    <button id="sortBillsBtn" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-2 rounded-xl text-sm font-medium transition"><i class="fas fa-sort-amount-down-alt"></i> Ordenar vencimientos</button>
                     <button id="resetMonthBtn" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-2 rounded-xl text-sm transition"><i class="fas fa-sync-alt"></i> Resetear mes</button>
                 </div>
             </div>
-            <p class="text-xs text-gray-500 mt-3"><i class="fas fa-info-circle"></i> Podés agregar múltiples vencimientos por servicio (pagos atrasados, cuotas, etc.). Cada fila se puede marcar como pagada individualmente.</p>
+            <p class="text-xs text-gray-500 mt-3"><i class="fas fa-info-circle"></i> Podés agregar múltiples vencimientos por servicio. El total solo considera vencimientos hasta el mes seleccionado (incluye vencidos). Usá "Ordenar vencimientos" para ordenar por fecha.</p>
         </div>
 
-        <!-- Tarjetas de servicios dinámicas (cada una con múltiples facturas) -->
+        <!-- Tarjetas de servicios -->
         <div id="servicesContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10"></div>
 
-        <!-- Herramientas extra: backup / pegado rápido -->
+        <!-- Herramientas extra -->
         <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-xl border border-emerald-100 mt-6">
             <div class="flex flex-wrap justify-between items-center gap-4">
                 <div class="flex gap-3">
@@ -72,7 +73,7 @@
                     <button id="importDataBtn" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-medium"><i class="fas fa-upload"></i> Restaurar copia</button>
                     <input type="file" id="importFileInput" accept=".json" class="hidden" />
                 </div>
-                <div class="text-xs text-gray-500 flex items-center gap-1"><i class="fas fa-database"></i> Datos guardados localmente · cada hermano puede usar su dispositivo</div>
+                <div class="text-xs text-gray-500 flex items-center gap-1"><i class="fas fa-database"></i> Datos guardados localmente</div>
             </div>
             <div class="border-t border-emerald-100 mt-4 pt-4">
                 <details class="cursor-pointer group">
@@ -90,7 +91,7 @@ Gas,2026-05-21,21112.14</pre>
             </div>
         </div>
 
-        <!-- FOOTER con URL de la aplicación (útil para compartir en GitHub Pages) -->
+        <!-- FOOTER con URL -->
         <div class="mt-10 text-center text-gray-500 text-sm border-t border-gray-200 pt-6 pb-4 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div class="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                 <i class="fas fa-link text-emerald-600"></i>
@@ -104,26 +105,27 @@ Gas,2026-05-21,21112.14</pre>
     </div>
 
     <script>
-        // ----- DEFINICIÓN DE SERVICIOS (con íconos actualizados) -----
+        // ----- SERVICIOS (ATM con ícono casa) -----
         const SERVICES = [
-            { id: "agua", name: "💧 AGUA", account: "080 0115322 000 0", portal: "https://www.aysam.com.ar/", icon: "fa-tint" },
-            { id: "luz", name: "⚡ LUZ", account: "2532800", portal: "https://www.edemsa.com/", icon: "fa-bolt" },
-            { id: "gas", name: "🔥 GAS", account: "20631467", portal: "https://www.ecogas.com.ar/", icon: "fa-fire" },
-            { id: "muni", name: "🏛️ MUNICIPALIDAD", account: "1177009000000", portal: "https://ciudaddemendoza.gob.ar/oficina-virtual/", icon: "fa-landmark" },
-            { id: "atm", name: "🏠 ATM (Inmobiliario)", account: "01 50310 1", portal: "https://atm.mendoza.gov.ar/descargarboletoinmobiliario/", icon: "fa-house-chimney" }  // casita
+            { id: "agua", name: "💧 AGUA", account: "080 0115322 000 0", portal: "https://www.aysam.com.ar/", icon: "fa-tint", annualEnabled: false },
+            { id: "luz", name: "⚡ LUZ", account: "2532800", portal: "https://www.edemsa.com/", icon: "fa-bolt", annualEnabled: false },
+            { id: "gas", name: "🔥 GAS", account: "20631467", portal: "https://www.ecogas.com.ar/", icon: "fa-fire", annualEnabled: false },
+            { id: "muni", name: "🏛️ MUNICIPALIDAD", account: "1177009000000", portal: "https://ciudaddemendoza.gob.ar/oficina-virtual/", icon: "fa-landmark", annualEnabled: false },
+            { id: "atm", name: "🏠 ATM (Inmobiliario)", account: "01 50310 1", portal: "https://atm.mendoza.gov.ar/descargarboletoinmobiliario/", icon: "fa-house-chimney", annualEnabled: true } // permite pago anual
         ];
 
-        // Estructura de datos por servicio: { bills: [{ id, dueDate, amount, paid }] }
         let currentMonthKey = "";
-        let billsData = {}; // { servicioId: { bills: [] } }
+        let billsData = {};      // { servicioId: { bills: [], annualPaid: bool } }
+        let annualPaidFlag = { atm: false };  // solo para ATM
 
-        // DOM elements
+        // DOM
         const servicesContainer = document.getElementById('servicesContainer');
         const monthPicker = document.getElementById('monthPicker');
         const totalSpan = document.getElementById('totalAmountSpan');
         const whatsappBtn = document.getElementById('whatsappBtn');
         const pdfBtn = document.getElementById('pdfBtn');
         const copySummaryBtn = document.getElementById('copySummaryBtn');
+        const sortBillsBtn = document.getElementById('sortBillsBtn');
         const resetMonthBtn = document.getElementById('resetMonthBtn');
         const exportDataBtn = document.getElementById('exportDataBtn');
         const importDataBtn = document.getElementById('importDataBtn');
@@ -133,52 +135,77 @@ Gas,2026-05-21,21112.14</pre>
         const appUrlSpan = document.getElementById('appUrlSpan');
         const copyUrlBtn = document.getElementById('copyUrlBtn');
 
-        // Obtener URL actual (para incluir en resúmenes)
-        function getCurrentAppUrl() {
-            return window.location.href;
-        }
-        
-        // Mostrar URL actual en el footer
-        function displayCurrentUrl() {
-            const fullUrl = getCurrentAppUrl();
-            appUrlSpan.textContent = fullUrl;
-        }
-        
-        function copyCurrentUrl() {
-            const url = getCurrentAppUrl();
-            navigator.clipboard.writeText(url).then(() => {
-                const toast = document.createElement('div');
-                toast.innerText = '✅ Enlace copiado al portapapeles';
-                toast.className = 'fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full text-sm z-50 shadow-lg';
-                document.body.appendChild(toast);
-                setTimeout(() => toast.remove(), 2000);
-            }).catch(() => alert('No se pudo copiar la URL manualmente'));
+        // Helper: obtener URL
+        function getCurrentAppUrl() { return window.location.href; }
+        function displayCurrentUrl() { appUrlSpan.textContent = getCurrentAppUrl(); }
+        function copyCurrentUrl() { navigator.clipboard.writeText(getCurrentAppUrl()).then(() => showToast("✅ Enlace copiado")); }
+
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.innerText = msg;
+            toast.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full text-sm z-50 shadow-lg';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
         }
 
-        // Helper: formateo moneda
+        // Parseo de montos: soporta "4,600.00" y "4.600,00"
+        function parseAmountFromInput(str) {
+            if (!str) return 0;
+            let cleaned = str.trim().replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+            let num = parseFloat(cleaned);
+            return isNaN(num) ? 0 : num;
+        }
+
         function formatCurrency(value) {
             if (value === undefined || value === null || isNaN(value)) return "$0";
             return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(value);
         }
 
-        function parseAmountFromInput(str) {
-            let cleaned = str.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
-            let num = parseFloat(cleaned);
-            return isNaN(num) ? 0 : num;
+        // Fecha límite para incluir en total: último día del mes seleccionado
+        function getMonthEndDate(yearMonth) {
+            if (!yearMonth) return new Date(2099,11,31);
+            let [year, month] = yearMonth.split('-');
+            let lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+            return new Date(parseInt(year), parseInt(month)-1, lastDay);
         }
 
-        // Guardar en localStorage (estructura completa por mes)
+        // Calcular total solo con vencimientos <= último día del mes seleccionado (incluye vencidos)
+        function computeTotal() {
+            if (!currentMonthKey) return 0;
+            const endDate = getMonthEndDate(currentMonthKey);
+            let total = 0;
+            for (let s of SERVICES) {
+                if (s.id === 'atm' && annualPaidFlag.atm) continue; // pago anual, no suma
+                const service = billsData[s.id];
+                if (service && service.bills) {
+                    for (let bill of service.bills) {
+                        if (bill.paid) continue;
+                        if (bill.amount > 0 && bill.dueDate) {
+                            const due = new Date(bill.dueDate);
+                            if (!isNaN(due) && due <= endDate) {
+                                total += bill.amount;
+                            }
+                        }
+                    }
+                }
+            }
+            return total;
+        }
+
+        function updateTotalUI() { totalSpan.innerText = formatCurrency(computeTotal()); }
+
+        // Guardar / Cargar localStorage (incluye annualPaidFlag para atm)
         function saveToLocalStorage() {
             if (!currentMonthKey) return;
             const toStore = {
                 month: currentMonthKey,
-                servicesData: billsData
+                servicesData: billsData,
+                annualPaid: annualPaidFlag
             };
             localStorage.setItem(`tax_multi_${currentMonthKey}`, JSON.stringify(toStore));
             localStorage.setItem('tax_last_month_multi', currentMonthKey);
         }
 
-        // Cargar datos del mes
         function loadFromLocalStorage(month) {
             const stored = localStorage.getItem(`tax_multi_${month}`);
             if (stored) {
@@ -186,7 +213,8 @@ Gas,2026-05-21,21112.14</pre>
                     const parsed = JSON.parse(stored);
                     if (parsed.month === month && parsed.servicesData) {
                         billsData = parsed.servicesData;
-                        // asegurar estructura mínima para servicios sin datos
+                        if (parsed.annualPaid) annualPaidFlag = parsed.annualPaid;
+                        else annualPaidFlag = { atm: false };
                         for (let s of SERVICES) {
                             if (!billsData[s.id]) billsData[s.id] = { bills: [] };
                             if (!billsData[s.id].bills) billsData[s.id].bills = [];
@@ -195,54 +223,23 @@ Gas,2026-05-21,21112.14</pre>
                     }
                 } catch(e) { console.warn(e); }
             }
-            // Inicializar vacío: cada servicio con array vacío
+            // Inicializar vacío
             billsData = {};
-            for (let s of SERVICES) {
-                billsData[s.id] = { bills: [] };
-            }
+            for (let s of SERVICES) billsData[s.id] = { bills: [] };
+            annualPaidFlag = { atm: false };
             return false;
         }
 
-        // Calcular total pendiente (no pagado)
-        function computeTotal() {
-            let total = 0;
-            for (let s of SERVICES) {
-                const service = billsData[s.id];
-                if (service && service.bills) {
-                    for (let bill of service.bills) {
-                        if (!bill.paid && typeof bill.amount === 'number' && !isNaN(bill.amount) && bill.amount > 0) {
-                            total += bill.amount;
-                        }
-                    }
-                }
-            }
-            return total;
-        }
+        function generateBillId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 6); }
 
-        function updateTotalUI() {
-            totalSpan.innerText = formatCurrency(computeTotal());
-        }
-
-        // Generar ID único para cada factura
-        function generateBillId() {
-            return Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-        }
-
-        // Agregar nueva fila de vencimiento a un servicio
         function addBillRow(serviceId) {
             if (!billsData[serviceId]) billsData[serviceId] = { bills: [] };
-            const newBill = {
-                id: generateBillId(),
-                dueDate: "",
-                amount: 0,
-                paid: false
-            };
+            const newBill = { id: generateBillId(), dueDate: "", amount: 0, paid: false };
             billsData[serviceId].bills.push(newBill);
             saveToLocalStorage();
             renderCards();
         }
 
-        // Eliminar una factura específica
         function removeBill(serviceId, billId) {
             if (billsData[serviceId]) {
                 billsData[serviceId].bills = billsData[serviceId].bills.filter(b => b.id !== billId);
@@ -251,7 +248,6 @@ Gas,2026-05-21,21112.14</pre>
             }
         }
 
-        // Actualizar campos de una factura
         function updateBillField(serviceId, billId, field, value) {
             const service = billsData[serviceId];
             if (!service) return;
@@ -262,35 +258,57 @@ Gas,2026-05-21,21112.14</pre>
                 if (field === 'paid') bill.paid = value;
                 saveToLocalStorage();
                 updateTotalUI();
-                renderCards();  // refrescar para mostrar cambios visuales (colores, etc)
+                renderCards();
             }
         }
 
-        // Copiar número de cuenta al portapapeles
         function copyAccount(accountNumber) {
-            navigator.clipboard.writeText(accountNumber).then(() => {
-                const toast = document.createElement('div');
-                toast.innerText = '✅ Cuenta copiada';
-                toast.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full text-sm z-50 shadow-lg';
-                document.body.appendChild(toast);
-                setTimeout(() => toast.remove(), 1500);
-            }).catch(() => alert('No se pudo copiar manualmente'));
+            navigator.clipboard.writeText(accountNumber).then(() => showToast("✅ Cuenta copiada"));
         }
 
-        // Renderizado principal (cada servicio con múltiples filas)
+        // Ordenar vencimientos de cada servicio por fecha (los vacíos al final)
+        function sortAllBills() {
+            for (let s of SERVICES) {
+                const service = billsData[s.id];
+                if (service && service.bills) {
+                    service.bills.sort((a,b) => {
+                        if (!a.dueDate && !b.dueDate) return 0;
+                        if (!a.dueDate) return 1;
+                        if (!b.dueDate) return -1;
+                        return new Date(a.dueDate) - new Date(b.dueDate);
+                    });
+                }
+            }
+            saveToLocalStorage();
+            renderCards();
+            showToast("✅ Vencimientos ordenados por fecha");
+        }
+
+        // Alternar pago anual en ATM
+        function toggleAnnualPaid(checked) {
+            annualPaidFlag.atm = checked;
+            if (checked) {
+                // limpiar vencimientos de ATM para que no aparezcan
+                if (billsData.atm) billsData.atm.bills = [];
+            }
+            saveToLocalStorage();
+            renderCards();
+            updateTotalUI();
+        }
+
+        // Renderizado de tarjetas
         function renderCards() {
-            if (!servicesContainer) return;
             servicesContainer.innerHTML = '';
             for (let s of SERVICES) {
                 const serviceData = billsData[s.id] || { bills: [] };
-                const bills = serviceData.bills;
-                // Ordenar por fecha si existe
-                const sortedBills = [...bills].sort((a,b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
-                
+                let bills = [...serviceData.bills];
+                const isAtm = s.id === 'atm';
+                const annualActive = annualPaidFlag.atm && isAtm;
+
                 const card = document.createElement('div');
-                card.className = `bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 card-hover`;
-                
-                // Header con nombre, cuenta, botón copiar y portal
+                card.className = 'bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 card-hover';
+
+                // Header
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'p-5 pb-2 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gradient-to-r from-gray-50 to-white';
                 headerDiv.innerHTML = `
@@ -300,332 +318,275 @@ Gas,2026-05-21,21112.14</pre>
                             <h2 class="text-xl font-bold text-gray-800">${s.name}</h2>
                             <div class="flex items-center gap-2 flex-wrap">
                                 <span class="text-xs text-gray-500 font-mono">Cuenta: ${s.account}</span>
-                                <button class="copyAccountBtn text-blue-500 text-xs bg-blue-50 px-2 py-1 rounded-full hover:bg-blue-100 transition"><i class="far fa-copy"></i> Copiar cuenta</button>
+                                <button class="copyAccountBtn text-blue-500 text-xs bg-blue-50 px-2 py-1 rounded-full"><i class="far fa-copy"></i> Copiar cuenta</button>
                             </div>
                         </div>
                     </div>
                     <a href="${s.portal}" target="_blank" class="text-blue-500 text-sm hover:underline flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full"><i class="fas fa-external-link-alt"></i> Portal web</a>
                 `;
                 card.appendChild(headerDiv);
-                
-                // Cuerpo: lista de facturas
-                const billsContainer = document.createElement('div');
-                billsContainer.className = 'p-5 space-y-3';
-                if (sortedBills.length === 0) {
-                    const emptyMsg = document.createElement('div');
-                    emptyMsg.className = 'text-center py-6 text-gray-400 text-sm';
-                    emptyMsg.innerHTML = '<i class="fas fa-receipt"></i> Sin vencimientos aún. Agregá el primero.';
-                    billsContainer.appendChild(emptyMsg);
-                } else {
-                    sortedBills.forEach((bill, idx) => {
-                        const billDiv = document.createElement('div');
-                        billDiv.className = `factura-item p-3 rounded-xl border ${bill.paid ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'} shadow-sm transition`;
-                        const dueDateValue = bill.dueDate || '';
-                        const amountValue = (typeof bill.amount === 'number' && !isNaN(bill.amount)) ? bill.amount : 0;
-                        const isPaid = !!bill.paid;
-                        const showWarning = (!isPaid && dueDateValue && new Date(dueDateValue) < new Date());
-                        billDiv.innerHTML = `
-                            <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
-                                <span class="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Vencimiento #${idx+1}</span>
-                                <button class="removeBillBtn text-red-400 hover:text-red-700 text-xs" data-bill-id="${bill.id}"><i class="fas fa-trash-alt"></i> Eliminar</button>
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-600">📅 Fecha vencimiento</label>
-                                    <input type="date" class="dueDateInput w-full mt-1 p-2 border border-gray-300 rounded-xl text-sm" data-service="${s.id}" data-bill-id="${bill.id}" value="${dueDateValue}">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-600">💰 Monto (ARS)</label>
-                                    <input type="text" class="amountInput w-full mt-1 p-2 border border-gray-300 rounded-xl text-sm" data-service="${s.id}" data-bill-id="${bill.id}" value="${amountValue > 0 ? amountValue.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : ''}" placeholder="Ej: 20.077,16">
-                                </div>
-                            </div>
-                            <div class="flex justify-between items-center mt-2">
-                                <label class="flex items-center gap-2 text-sm cursor-pointer">
-                                    <input type="checkbox" class="paidCheckbox" data-service="${s.id}" data-bill-id="${bill.id}" ${isPaid ? 'checked' : ''}> 
-                                    <span class="text-gray-700">✔️ Pagado</span>
-                                </label>
-                                ${showWarning ? '<span class="text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full"><i class="fas fa-exclamation-triangle"></i> VENCIDO</span>' : ''}
-                                ${dueDateValue && !isPaid && !showWarning ? '<span class="text-xs text-amber-600"><i class="far fa-clock"></i> Pendiente</span>' : ''}
-                            </div>
-                        `;
-                        billsContainer.appendChild(billDiv);
-                    });
+
+                const bodyDiv = document.createElement('div');
+                bodyDiv.className = 'p-5 space-y-3';
+
+                if (isAtm && s.annualEnabled) {
+                    const annualDiv = document.createElement('div');
+                    annualDiv.className = 'mb-4 p-3 bg-amber-50 rounded-xl flex items-center justify-between';
+                    annualDiv.innerHTML = `
+                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <input type="checkbox" id="annualPaidCheckbox" ${annualActive ? 'checked' : ''}> 
+                            <span><i class="fas fa-calendar-check"></i> Pagado anualmente ✅</span>
+                        </label>
+                        <span class="text-xs text-gray-500">Activar esto reemplaza los vencimientos individuales</span>
+                    `;
+                    bodyDiv.appendChild(annualDiv);
+                    const annualCheck = annualDiv.querySelector('#annualPaidCheckbox');
+                    annualCheck.addEventListener('change', (e) => toggleAnnualPaid(e.target.checked));
                 }
-                // Botón "Agregar otro vencimiento"
-                const addButton = document.createElement('button');
-                addButton.className = 'mt-3 w-full py-2 rounded-xl border border-dashed border-emerald-300 text-emerald-700 text-sm font-medium hover:bg-emerald-50 transition flex items-center justify-center gap-2';
-                addButton.innerHTML = '<i class="fas fa-plus-circle"></i> Agregar otro vencimiento / cuota';
-                addButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    addBillRow(s.id);
-                });
-                billsContainer.appendChild(addButton);
-                card.appendChild(billsContainer);
+
+                if (!annualActive) {
+                    if (bills.length === 0) {
+                        const emptyMsg = document.createElement('div');
+                        emptyMsg.className = 'text-center py-6 text-gray-400 text-sm';
+                        emptyMsg.innerHTML = '<i class="fas fa-receipt"></i> Sin vencimientos aún. Agregá el primero.';
+                        bodyDiv.appendChild(emptyMsg);
+                    } else {
+                        bills.forEach((bill, idx) => {
+                            const billDiv = document.createElement('div');
+                            billDiv.className = `factura-item p-3 rounded-xl border ${bill.paid ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'} shadow-sm`;
+                            const dueDateValue = bill.dueDate || '';
+                            const amountValue = bill.amount;
+                            const isPaid = !!bill.paid;
+                            const showWarning = (!isPaid && dueDateValue && new Date(dueDateValue) < new Date());
+                            billDiv.innerHTML = `
+                                <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+                                    <span class="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Vencimiento #${idx+1}</span>
+                                    <button class="removeBillBtn text-red-400 hover:text-red-700 text-xs" data-service-id="${s.id}" data-bill-id="${bill.id}"><i class="fas fa-trash-alt"></i> Eliminar</button>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-600">📅 Fecha vencimiento</label>
+                                        <input type="date" class="dueDateInput w-full mt-1 p-2 border border-gray-300 rounded-xl text-sm" data-service-id="${s.id}" data-bill-id="${bill.id}" value="${dueDateValue}">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-600">💰 Monto (ARS)</label>
+                                        <input type="text" class="amountInput w-full mt-1 p-2 border border-gray-300 rounded-xl text-sm" data-service-id="${s.id}" data-bill-id="${bill.id}" value="${amountValue > 0 ? amountValue.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2}) : ''}" placeholder="Ej: 4.600,00">
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center mt-2">
+                                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" class="paidCheckbox" data-service-id="${s.id}" data-bill-id="${bill.id}" ${isPaid ? 'checked' : ''}> 
+                                        <span class="text-gray-700">✔️ Pagado</span>
+                                    </label>
+                                    ${showWarning ? '<span class="text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full"><i class="fas fa-exclamation-triangle"></i> VENCIDO</span>' : ''}
+                                </div>
+                            `;
+                            bodyDiv.appendChild(billDiv);
+                        });
+                    }
+                    const addButton = document.createElement('button');
+                    addButton.className = 'mt-3 w-full py-2 rounded-xl border border-dashed border-emerald-300 text-emerald-700 text-sm font-medium hover:bg-emerald-50 transition flex items-center justify-center gap-2';
+                    addButton.innerHTML = '<i class="fas fa-plus-circle"></i> Agregar otro vencimiento / cuota';
+                    addButton.addEventListener('click', (e) => { e.preventDefault(); addBillRow(s.id); });
+                    bodyDiv.appendChild(addButton);
+                } else {
+                    // modo pago anual: mostrar mensaje
+                    const annualMsg = document.createElement('div');
+                    annualMsg.className = 'text-center py-6 text-emerald-700 bg-emerald-50 rounded-xl';
+                    annualMsg.innerHTML = '<i class="fas fa-check-circle"></i> Este impuesto ya está pago anualmente ✅';
+                    bodyDiv.appendChild(annualMsg);
+                }
+
+                card.appendChild(bodyDiv);
                 servicesContainer.appendChild(card);
             }
-            
-            // Bindear eventos después de renderizar
-            attachEvents();
-            updateTotalUI();
-        }
-        
-        function attachEvents() {
-            // Copiar cuenta
-            document.querySelectorAll('.copyAccountBtn').forEach((btn) => {
-                btn.removeEventListener('click', copyHandler);
-                btn.addEventListener('click', copyHandler);
-                function copyHandler(e) {
-                    e.stopPropagation();
-                    const cardDiv = btn.closest('.bg-white');
-                    const accountSpan = cardDiv?.querySelector('.font-mono')?.innerText.replace('Cuenta: ', '');
+
+            // Rebindear eventos
+            document.querySelectorAll('.copyAccountBtn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const card = btn.closest('.bg-white');
+                    const accountSpan = card?.querySelector('.font-mono')?.innerText.replace('Cuenta: ', '');
                     if (accountSpan) copyAccount(accountSpan);
                     else {
-                        const nameElem = cardDiv?.querySelector('h2')?.innerText;
-                        const found = SERVICES.find(s => nameElem?.includes(s.name));
+                        const name = card?.querySelector('h2')?.innerText;
+                        const found = SERVICES.find(s => name?.includes(s.name));
                         if (found) copyAccount(found.account);
                     }
-                }
+                });
             });
-            
-            // Fecha vencimiento
             document.querySelectorAll('.dueDateInput').forEach(inp => {
-                inp.removeEventListener('change', dueChangeHandler);
-                inp.addEventListener('change', dueChangeHandler);
-                function dueChangeHandler(e) {
-                    const serviceId = inp.dataset.service;
-                    const billId = inp.dataset.billId;
-                    updateBillField(serviceId, billId, 'dueDate', inp.value);
-                }
+                inp.addEventListener('change', (e) => {
+                    const sid = inp.dataset.serviceId;
+                    const bid = inp.dataset.billId;
+                    updateBillField(sid, bid, 'dueDate', inp.value);
+                });
             });
-            
-            // Monto
             document.querySelectorAll('.amountInput').forEach(inp => {
-                inp.removeEventListener('change', amountChangeHandler);
-                inp.addEventListener('change', amountChangeHandler);
-                function amountChangeHandler(e) {
-                    const serviceId = inp.dataset.service;
-                    const billId = inp.dataset.billId;
-                    updateBillField(serviceId, billId, 'amount', inp.value);
-                }
+                inp.addEventListener('change', (e) => {
+                    const sid = inp.dataset.serviceId;
+                    const bid = inp.dataset.billId;
+                    updateBillField(sid, bid, 'amount', inp.value);
+                });
             });
-            
-            // Checkbox pagado
             document.querySelectorAll('.paidCheckbox').forEach(chk => {
-                chk.removeEventListener('change', paidChangeHandler);
-                chk.addEventListener('change', paidChangeHandler);
-                function paidChangeHandler(e) {
-                    const serviceId = chk.dataset.service;
-                    const billId = chk.dataset.billId;
-                    updateBillField(serviceId, billId, 'paid', chk.checked);
-                }
+                chk.addEventListener('change', (e) => {
+                    const sid = chk.dataset.serviceId;
+                    const bid = chk.dataset.billId;
+                    updateBillField(sid, bid, 'paid', chk.checked);
+                });
             });
-            
-            // Botones eliminar factura
             document.querySelectorAll('.removeBillBtn').forEach(btn => {
-                btn.removeEventListener('click', removeHandler);
-                btn.addEventListener('click', removeHandler);
-                function removeHandler(e) {
+                btn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    e.stopPropagation();
-                    const billId = btn.dataset.billId;
-                    const card = btn.closest('.bg-white');
-                    const serviceNameHeader = card?.querySelector('h2')?.innerText;
-                    const foundService = SERVICES.find(s => serviceNameHeader?.includes(s.name));
-                    if (foundService && billId) {
-                        if (confirm('¿Eliminar este vencimiento?')) {
-                            removeBill(foundService.id, billId);
-                        }
-                    }
-                }
+                    const sid = btn.dataset.serviceId;
+                    const bid = btn.dataset.billId;
+                    if (sid && bid && confirm('¿Eliminar este vencimiento?')) removeBill(sid, bid);
+                });
             });
+            updateTotalUI();
         }
-        
-        // ----- Obtener nombre del mes correctamente (sin desfase de zona horaria) -----
-        function getFormattedMonthName(yearMonthStr) {
-            if (!yearMonthStr || !yearMonthStr.includes('-')) return 'este mes';
-            const [year, month] = yearMonthStr.split('-');
-            const date = new Date(parseInt(year), parseInt(month) - 1, 1); // mes base 0
-            return date.toLocaleDateString('es-AR', { year: 'numeric', month: 'long' });
-        }
-        
-        // ----- Resumen para WhatsApp / copia (INCLUYE URL, mes corregido, sin línea emotiva) -----
-        function generateSummaryText() {
+
+        // ----- Generar resumen con formato minimalista (sin estados, sin 🔹, saltos de línea) -----
+        function generateFormattedSummary() {
             const selectedMonth = monthPicker.value;
-            const monthName = selectedMonth ? getFormattedMonthName(selectedMonth) : 'este mes';
-            let lines = [`📆 *RESUMEN IMPUESTOS ALI - ${monthName.toUpperCase()}*`, ''];
+            const monthName = selectedMonth ? (() => {
+                const [y,m] = selectedMonth.split('-');
+                return new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('es-AR', { year:'numeric', month:'long' });
+            })() : 'este mes';
+            const lines = [];
+            lines.push(`📆 *RESUMEN IMPUESTOS ALI - ${monthName.toUpperCase()}*`);
+            lines.push('');
             let totalPendiente = 0;
+            const endDate = getMonthEndDate(selectedMonth);
             for (let s of SERVICES) {
-                const service = billsData[s.id];
-                if (!service || service.bills.length === 0) {
-                    lines.push(`🔹 *${s.name}*: sin vencimientos cargados.`);
+                if (s.id === 'atm' && annualPaidFlag.atm) {
+                    lines.push(`*${s.name}*: Ya se ha pagado anualmente.`);
+                    lines.push('');
                     continue;
                 }
-                lines.push(`🔹 *${s.name}*:`);
-                for (let idx=0; idx<service.bills.length; idx++) {
-                    const bill = service.bills[idx];
-                    const amount = bill.amount || 0;
-                    const due = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('es-AR') : 'Sin fecha';
-                    const status = bill.paid ? '✅ Pagado' : '❌ Pendiente';
-                    if (!bill.paid && amount > 0) totalPendiente += amount;
-                    const montoStr = amount > 0 ? formatCurrency(amount) : '$0';
-                    lines.push(`   ${idx+1}) ${montoStr} · Vence: ${due} · ${status}`);
+                const service = billsData[s.id];
+                const bills = service?.bills || [];
+                const filteredBills = bills.filter(b => {
+                    if (b.paid) return false;
+                    if (b.amount <= 0) return false;
+                    if (!b.dueDate) return false;
+                    const dueDate = new Date(b.dueDate);
+                    return !isNaN(dueDate) && dueDate <= endDate;
+                });
+                if (filteredBills.length === 0) {
+                    lines.push(`*${s.name}*: -`);
+                    lines.push('');
+                    continue;
                 }
+                lines.push(`*${s.name}*:`);
+                filteredBills.forEach((bill, idx) => {
+                    const monto = bill.amount;
+                    const due = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('es-AR') : 'Sin fecha';
+                    lines.push(`   ${idx+1}) ${formatCurrency(monto)} · Vence: ${due}`);
+                    totalPendiente += monto;
+                });
+                lines.push('');
             }
-            lines.push('', `💰 *TOTAL A PAGAR: ${formatCurrency(totalPendiente)}*`, '');
-            // 🔗 INCLUIMOS LA URL DE LA APP AUTOMÁTICAMENTE
+            lines.push(`💰 *TOTAL A PAGAR: ${formatCurrency(totalPendiente)}*`);
+            lines.push('');
             lines.push(`📱 *Accedé a la app desde:* ${getCurrentAppUrl()}`);
             return lines.join('\n');
         }
-        
+
         function sendWhatsApp() {
-            const text = generateSummaryText();
+            const text = generateFormattedSummary();
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
         }
-        
+
         function exportToPDF() {
-            const currentUrl = getCurrentAppUrl();
             const selectedMonth = monthPicker.value;
-            const monthTitle = selectedMonth ? getFormattedMonthName(selectedMonth) : 'Mes actual';
-            const elementToPrint = document.createElement('div');
-            elementToPrint.innerHTML = `
-                <div style="padding: 20px; font-family: 'Inter',sans-serif;">
-                    <h1 style="color:#1e5940;">🧾 Impuestos Ali - Resumen ${monthTitle}</h1>
-                    <hr/>
-                    ${SERVICES.map(s => {
-                        const service = billsData[s.id];
-                        if (!service || service.bills.length === 0) return `<div><strong>${s.name}</strong>: Sin cargas</div>`;
-                        return `
-                            <div style="margin-top: 20px;"><strong>${s.name}</strong> (Cuenta: ${s.account})</div>
-                            <table style="width:100%; border-collapse:collapse; margin-top:5px;">
-                                <tr style="background:#e9f5ef;"><th>#</th><th>Fecha venc.</th><th>Monto</th><th>Estado</th></tr>
-                                ${service.bills.map((bill,idx) => `
-                                    <tr>
-                                        <td>${idx+1}</td>
-                                        <td>${bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('es-AR') : '—'}</td>
-                                        <td>${formatCurrency(bill.amount)}</td>
-                                        <td>${bill.paid ? 'Pagado ✅' : 'Pendiente ❌'}</td>
-                                    </tr>
-                                `).join('')}
-                            </table>
-                        `;
-                    }).join('')}
-                    <div style="margin-top:25px; font-weight:bold;">Total pendiente: ${formatCurrency(computeTotal())}</div>
-                    <div style="margin-top:15px; font-size:11px; color:#2b6e4f; border-top: 1px solid #ccc; padding-top: 10px;">
-                        🔗 Acceso a la aplicación: ${currentUrl}
-                    </div>
-                    <footer style="margin-top:20px; font-size:10px;">Generado con Impuestos Ali - ${new Date().toLocaleString()}</footer>
-                </div>
-            `;
-            html2pdf().set({ margin: 0.5, filename: `impuestos_ali_${selectedMonth || 'mes'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } }).from(elementToPrint).save();
+            const monthTitle = selectedMonth ? (()=>{let [y,m]=selectedMonth.split('-'); return new Date(parseInt(y), parseInt(m)-1,1).toLocaleDateString('es-AR',{year:'numeric',month:'long'});})() : 'Mes actual';
+            const content = generateFormattedSummary().replace(/\*/g, '').replace(/📆/, '').replace(/💰/, '').replace(/📱/, '').trim();
+            const element = document.createElement('div');
+            element.innerHTML = `<div style="font-family:Inter; padding:20px;"><h2>🧾 Impuestos Ali - ${monthTitle}</h2><pre style="white-space:pre-wrap; font-size:12px;">${content}</pre><footer style="margin-top:20px;">Generado ${new Date().toLocaleString()}</footer></div>`;
+            html2pdf().set({ margin: 0.5, filename: `impuestos_ali_${selectedMonth}.pdf` }).from(element).save();
         }
-        
+
         function copySummary() {
-            let text = generateSummaryText().replace(/\*/g, '');
-            navigator.clipboard.writeText(text).then(() => alert('📋 Resumen copiado al portapapeles (incluye el enlace a la app)'));
+            const text = generateFormattedSummary().replace(/\*/g, '');
+            navigator.clipboard.writeText(text).then(() => showToast("📋 Resumen copiado"));
         }
-        
+
         function resetMonth() {
-            if (confirm('⚠️ ¿Resetear TODOS los vencimientos del mes actual? Se perderán datos sin backup.')) {
-                for (let s of SERVICES) {
-                    billsData[s.id] = { bills: [] };
-                }
+            if (confirm('⚠️ Resetear todos los vencimientos del mes actual? Se perderán datos.')) {
+                for (let s of SERVICES) billsData[s.id] = { bills: [] };
+                annualPaidFlag = { atm: false };
                 saveToLocalStorage();
                 renderCards();
                 updateTotalUI();
             }
         }
-        
-        // Backup / Restore
+
+        // Backup
         function exportFullBackup() {
-            const allKeys = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && (key.startsWith('tax_multi_') || key === 'tax_last_month_multi')) {
-                    allKeys.push({ key, value: localStorage.getItem(key) });
-                }
+            const all = [];
+            for (let i=0;i<localStorage.length;i++) {
+                const k = localStorage.key(i);
+                if (k && (k.startsWith('tax_multi_') || k === 'tax_last_month_multi')) all.push({key:k, value:localStorage.getItem(k)});
             }
-            const backup = { version: 2, exportDate: new Date().toISOString(), monthsData: allKeys, lastMonth: localStorage.getItem('tax_last_month_multi') };
-            const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
+            const blob = new Blob([JSON.stringify({version:2, exportDate: new Date(), monthsData:all})], {type:'application/json'});
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = `tax_ali_backup_${new Date().toISOString().slice(0,10)}.json`;
             a.click();
-            URL.revokeObjectURL(a.href);
         }
-        
         function importBackup(file) {
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = e => {
                 try {
-                    const backup = JSON.parse(e.target.result);
-                    if (backup.monthsData && Array.isArray(backup.monthsData)) {
-                        for (let item of backup.monthsData) {
-                            localStorage.setItem(item.key, item.value);
-                        }
-                        if (backup.lastMonth) localStorage.setItem('tax_last_month_multi', backup.lastMonth);
-                        alert('✅ Restauración exitosa. Recargando...');
+                    const data = JSON.parse(e.target.result);
+                    if (data.monthsData) {
+                        data.monthsData.forEach(item => localStorage.setItem(item.key, item.value));
+                        alert("✅ Restauración exitosa. Recargando...");
                         location.reload();
-                    } else {
-                        alert('Formato de backup inválido');
-                    }
-                } catch(err) { alert('Error al leer archivo: ' + err.message); }
+                    } else alert("Formato inválido");
+                } catch(err) { alert("Error: "+err.message); }
             };
             reader.readAsText(file);
         }
-        
-        // Pegado rápido multilínea
+
+        // Pegado rápido mejorado
         function applyQuickPaste() {
             const raw = quickPasteArea.value;
             if (!raw.trim()) return;
             const lines = raw.split(/\r?\n/);
-            let modified = false;
+            let added = 0;
             for (let line of lines) {
                 line = line.trim();
-                if (line === "") continue;
-                const parts = line.split(',').map(p => p.trim());
-                if (parts.length >= 3) {
-                    const namePart = parts[0].toLowerCase();
-                    let matchedService = SERVICES.find(s => s.name.toLowerCase().includes(namePart) || s.id === namePart);
-                    if (!matchedService && namePart.includes('agua')) matchedService = SERVICES[0];
-                    if (!matchedService && namePart.includes('luz')) matchedService = SERVICES[1];
-                    if (!matchedService && namePart.includes('gas')) matchedService = SERVICES[2];
-                    if (!matchedService && namePart.includes('muni')) matchedService = SERVICES[3];
-                    if (!matchedService && namePart.includes('atm')) matchedService = SERVICES[4];
-                    if (matchedService) {
-                        const dateStr = parts[1];
-                        const amountNum = parseAmountFromInput(parts[2]);
-                        if (dateStr && !isNaN(amountNum)) {
-                            const newBill = { id: generateBillId(), dueDate: dateStr, amount: amountNum, paid: false };
-                            if (!billsData[matchedService.id]) billsData[matchedService.id] = { bills: [] };
-                            billsData[matchedService.id].bills.push(newBill);
-                            modified = true;
-                        }
+                if (!line) continue;
+                const parts = line.split(',').map(p=>p.trim());
+                if (parts.length>=3) {
+                    let match = SERVICES.find(s => s.name.toLowerCase().includes(parts[0].toLowerCase()) || s.id === parts[0].toLowerCase());
+                    if (!match) continue;
+                    const dateStr = parts[1];
+                    const amountVal = parseAmountFromInput(parts[2]);
+                    if (dateStr && !isNaN(amountVal) && amountVal>0) {
+                        const newBill = { id: generateBillId(), dueDate: dateStr, amount: amountVal, paid: false };
+                        if (!billsData[match.id]) billsData[match.id] = { bills: [] };
+                        billsData[match.id].bills.push(newBill);
+                        added++;
                     }
                 }
             }
-            if (modified) {
-                saveToLocalStorage();
-                renderCards();
-                quickPasteArea.value = '';
-                alert('✅ Vencimientos agregados correctamente.');
-            } else {
-                alert('⚠️ No se pudo interpretar. Usá formato: "Agua,2026-05-10,20077"');
-            }
+            if (added) { saveToLocalStorage(); renderCards(); quickPasteArea.value = ''; showToast(`✅ ${added} vencimientos agregados`); }
+            else alert("No se pudo interpretar. Formato: Servicio,YYYY-MM-DD,1234.56");
         }
-        
-        // cambio de mes
+
         function changeMonth(newMonth) {
             currentMonthKey = newMonth;
             loadFromLocalStorage(currentMonthKey);
             saveToLocalStorage();
             renderCards();
         }
-        
-        // Inicialización
+
         function init() {
             displayCurrentUrl();
             copyUrlBtn.addEventListener('click', copyCurrentUrl);
-            
             let savedMonth = localStorage.getItem('tax_last_month_multi');
             const today = new Date();
             const defaultMonth = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
@@ -634,18 +595,18 @@ Gas,2026-05-21,21112.14</pre>
             loadFromLocalStorage(currentMonthKey);
             saveToLocalStorage();
             renderCards();
-            
-            monthPicker.addEventListener('change', (e) => changeMonth(e.target.value));
+
+            monthPicker.addEventListener('change', e => changeMonth(e.target.value));
             whatsappBtn.addEventListener('click', sendWhatsApp);
             pdfBtn.addEventListener('click', exportToPDF);
             copySummaryBtn.addEventListener('click', copySummary);
+            sortBillsBtn.addEventListener('click', sortAllBills);
             resetMonthBtn.addEventListener('click', resetMonth);
             exportDataBtn.addEventListener('click', exportFullBackup);
             importDataBtn.addEventListener('click', () => importFileInput.click());
-            importFileInput.addEventListener('change', (e) => { if(e.target.files.length) importBackup(e.target.files[0]); importFileInput.value = ''; });
+            importFileInput.addEventListener('change', e => { if(e.target.files.length) importBackup(e.target.files[0]); importFileInput.value=''; });
             applyPasteBtn.addEventListener('click', applyQuickPaste);
         }
-        
         init();
     </script>
 </body>
