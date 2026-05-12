@@ -440,9 +440,18 @@ Gas,2026-05-21,21112.14</pre>
             });
         }
         
-        // ----- Resumen para WhatsApp / copia (INCLUYE URL AUTOMÁTICAMENTE) -----
+        // ----- Obtener nombre del mes correctamente (sin desfase de zona horaria) -----
+        function getFormattedMonthName(yearMonthStr) {
+            if (!yearMonthStr || !yearMonthStr.includes('-')) return 'este mes';
+            const [year, month] = yearMonthStr.split('-');
+            const date = new Date(parseInt(year), parseInt(month) - 1, 1); // mes base 0
+            return date.toLocaleDateString('es-AR', { year: 'numeric', month: 'long' });
+        }
+        
+        // ----- Resumen para WhatsApp / copia (INCLUYE URL, mes corregido, sin línea emotiva) -----
         function generateSummaryText() {
-            const monthName = monthPicker.value ? new Date(monthPicker.value + '-01').toLocaleDateString('es-AR', { year: 'numeric', month: 'long' }) : 'este mes';
+            const selectedMonth = monthPicker.value;
+            const monthName = selectedMonth ? getFormattedMonthName(selectedMonth) : 'este mes';
             let lines = [`📆 *RESUMEN IMPUESTOS ALI - ${monthName.toUpperCase()}*`, ''];
             let totalPendiente = 0;
             for (let s of SERVICES) {
@@ -464,7 +473,7 @@ Gas,2026-05-21,21112.14</pre>
             }
             lines.push('', `💰 *TOTAL A PAGAR: ${formatCurrency(totalPendiente)}*`, '');
             // 🔗 INCLUIMOS LA URL DE LA APP AUTOMÁTICAMENTE
-            lines.push(`📱 *Accedé a la app desde:* ${getCurrentAppUrl()}`, '');
+            lines.push(`📱 *Accedé a la app desde:* ${getCurrentAppUrl()}`);
             return lines.join('\n');
         }
         
@@ -475,10 +484,12 @@ Gas,2026-05-21,21112.14</pre>
         
         function exportToPDF() {
             const currentUrl = getCurrentAppUrl();
+            const selectedMonth = monthPicker.value;
+            const monthTitle = selectedMonth ? getFormattedMonthName(selectedMonth) : 'Mes actual';
             const elementToPrint = document.createElement('div');
             elementToPrint.innerHTML = `
                 <div style="padding: 20px; font-family: 'Inter',sans-serif;">
-                    <h1 style="color:#1e5940;">🧾 Impuestos Ali - Resumen ${monthPicker.value || 'Mes actual'}</h1>
+                    <h1 style="color:#1e5940;">🧾 Impuestos Ali - Resumen ${monthTitle}</h1>
                     <hr/>
                     ${SERVICES.map(s => {
                         const service = billsData[s.id];
@@ -505,7 +516,7 @@ Gas,2026-05-21,21112.14</pre>
                     <footer style="margin-top:20px; font-size:10px;">Generado con Impuestos Ali - ${new Date().toLocaleString()}</footer>
                 </div>
             `;
-            html2pdf().set({ margin: 0.5, filename: `impuestos_ali_${monthPicker.value || 'mes'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } }).from(elementToPrint).save();
+            html2pdf().set({ margin: 0.5, filename: `impuestos_ali_${selectedMonth || 'mes'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } }).from(elementToPrint).save();
         }
         
         function copySummary() {
